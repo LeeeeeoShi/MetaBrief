@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Card {
+  id              String   @id @default(cuid())
+  title           String
+  summary         String
+  subtitle        String   @default("")
+  whyMatters      String   @default("")
+  details         String   @default("")
+  keywords        String   @default("")
+  category        String
+  section         String   @default("")
+  importanceScore Int      @default(0)
+  sourceName      String
+  sourceType      String   @default("")
+  credibility     Int      @default(0)
+  sourceUrl       String
+  originalUrl     String
+  publishedAt     DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([sourceUrl, originalUrl])
+  @@index([publishedAt])
+  @@index([category])
+  @@index([section])
+  @@index([importanceScore])
+}
