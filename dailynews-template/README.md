@@ -2,57 +2,9 @@
 
 自动抓取国内外 AI/科技最新资讯，通过 AI 精选排名并生成分析，一站式浏览每日行业动态。
 
-## 快速开始
-
-### 1. 安装依赖
-
-```bash
-npm install
-```
-
-### 2. 初始化数据库
-
-```bash
-npx prisma db push
-```
-
-### 3. 配置 AI API Key
-
-编辑项目根目录的 `.env` 文件，填入你的 API Key：
-
-```bash
-AI_API_KEY="sk-xxx"
-```
-
-支持任何兼容 OpenAI 格式的 API（通义千问、DeepSeek、OpenAI 等），可在 `.env` 中修改：
-
-```env
-AI_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-AI_MODEL="qwen-plus"
-```
-
-### 4. 启动
-
-```bash
-npm run go
-```
-
-浏览器打开 `http://localhost:3000`
-
-### 5. 登录后台
-
-访问 `http://localhost:3000/admin`
-
-默认账号：`admin`
-默认密码：`123456`
-
-### 6. 开始使用
-
-进入后台 → API 配置确认 Key 已填写 → 仪表盘点「① 抓取」拉取新闻 → 「② AI 排名」精选 → 「③ AI 分析」生成解读
-
 ## 功能
 
-- **21 个信息源** — 覆盖海外媒体、国内媒体、大厂官方博客、社区、学术平台、搜索引擎
+- **28+ 信息源** — 覆盖海外媒体、国内媒体、大厂官方博客、社区、学术平台、搜索引擎
 - **AI 精选排名** — 一次 AI 调用从所有原始内容中智能挑选 Top 5，按 6 个板块分类并打分
 - **AI 深度分析** — 对精选内容自动生成事件简介、行业解读、客观细节、可信度评分
 - **实时进度条** — 抓取过程实时显示进度和日志
@@ -80,6 +32,46 @@ npm run go
 - **爬虫：** RSS / REST API / 网页抓取（cheerio）
 - **样式：** Tailwind CSS
 - **运行环境：** Node.js 18+
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+npm install
+```
+
+### 2. 配置数据库
+
+```bash
+npx prisma db push
+```
+
+### 3. 配置 API Key
+
+在后台 `http://localhost:3000/admin` → API 配置 页面填写，或直接编辑 `admin-config.json`：
+
+```json
+{
+  "AI_API_KEY": "sk-xxx",
+  "AI_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "AI_MODEL": "qwen-plus"
+}
+```
+
+### 4. 启动
+
+```bash
+npm run go
+```
+
+访问 `http://localhost:3000`
+
+### 5. 登录后台
+
+`http://localhost:3000/admin`
+
+默认账号：`admin` / `密码：123456`
 
 ## 工作流程
 

@@ -20,6 +20,12 @@ interface AiConfig {
   AI_MODEL: string
 }
 
+interface ProgressInfo {
+  current: number
+  total: number
+  message: string
+}
+
 export default function AdminPage() {
   const [stats, setStats] = useState({ total: 0, byCategory: {} as Record<string, number> })
   const [cards, setCards] = useState<CardData[]>([])
@@ -32,6 +38,10 @@ export default function AdminPage() {
   const [configMsg, setConfigMsg] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [exportingContent, setExportingContent] = useState(false)
+
+  const [crawlProgress, setCrawlProgress] = useState<ProgressInfo>({ current: 0, total: 0, message: '' })
+  const [rankProgress, setRankProgress] = useState<ProgressInfo>({ current: 0, total: 0, message: '' })
+  const [analyzeProgress, setAnalyzeProgress] = useState<ProgressInfo>({ current: 0, total: 0, message: '' })
 
   const fetchStats = async () => {
     const res = await fetch('/api/cards?limit=1000')
@@ -59,31 +69,27 @@ export default function AdminPage() {
     setConfigMsg(res.ok ? '✅ 配置已保存' : '❌ 保存失败')
   }
 
-  const [crawlProgress, setCrawlProgress] = useState({ current: 0, total: 0, currentName: '' })
-
-  const stepCrawl = () => {
+  const stepCrawl = (silent = false) => {
     setCrawling(true)
-    setCrawlProgress({ current: 0, total: 0, currentName: '' })
-    setCrawlLog((prev) => [...prev, '📡 开始抓取...'])
+    setCrawlProgress({ current: 0, total: 0, message: '' })
+    if (!silent) setCrawlLog((prev) => [...prev, '📡 开始抓取...'])
 
     const es = new EventSource('/api/crawl')
     es.onmessage = (event) => {
       const data = JSON.parse(event.data)
-
       if (data.type === 'start') {
         setCrawlProgress((p) => ({ ...p, total: data.total }))
       } else if (data.type === 'crawling') {
-        setCrawlProgress((p) => ({ ...p, current: p.current + 1, currentName: data.name }))
-        setCrawlLog((prev) => [...prev, `📡 ${data.name}...`])
+        setCrawlProgress((p) => ({ ...p, current: p.current + 1, message: data.name }))
+        if (!silent) setCrawlLog((prev) => [...prev, `📡 ${data.name}...`])
       } else if (data.type === 'done') {
-        setCrawlLog((prev) => {
-          const last = prev.length - 1
+        if (!silent) setCrawlLog((prev) => {
           const copy = [...prev]
-          copy[last] = `✅ ${data.name}: ${data.count} 条`
+          copy[copy.length - 1] = `✅ ${data.name}: ${data.count} 条`
           return copy
         })
       } else if (data.type === 'error') {
-        setCrawlLog((prev) => [...prev, `❌ ${data.name}: ${data.error?.slice(0, 80)}`])
+        if (!silent) setCrawlLog((prev) => [...prev, `❌ ${data.name}: ${data.error?.slice(0, 80)}`])
       } else if (data.type === 'complete') {
         setCrawling(false)
         es.close()
@@ -91,42 +97,74 @@ export default function AdminPage() {
       }
     }
     es.onerror = () => {
-      setCrawlLog((prev) => [...prev, '❌ 抓取连接中断'])
+      if (!silent) setCrawlLog((prev) => [...prev, '❌ 抓取连接中断'])
       setCrawling(false)
       es.close()
     }
   }
 
-  const stepRank = async () => {
+  const stepRank = (silent = false) => {
     setRanking(true)
-    setCrawlLog((prev) => [...prev, '🤖 AI 排名中...'])
-    try {
-      const res = await fetch('/api/admin/rank', { method: 'POST' })
-      const data = await res.json()
-      setCrawlLog((prev) => [...prev, `✅ 排名完成: ${data.ranked || data.message} 条`])
-      await fetchStats()
-    } catch { setCrawlLog((prev) => [...prev, '❌ 排名失败']) }
-    setRanking(false)
+    setRankProgress({ current: 0, total: 0, message: '' })
+    if (!silent) setCrawlLog((prev) => [...prev, '🤖 AI 排名中...'])
+
+    const es = new EventSource('/api/admin/rank')
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'progress') {
+        setRankProgress({ current: data.current, total: data.total, message: data.message || '' })
+      } else if (data.type === 'status') {
+        setRankProgress((p) => ({ ...p, message: data.message }))
+        if (!silent) setCrawlLog((prev) => [...prev, data.message])
+      } else if (data.type === 'error') {
+        if (!silent) setCrawlLog((prev) => [...prev, `❌ ${data.message}`])
+      } else if (data.type === 'complete') {
+        setRanking(false)
+        es.close()
+        fetchStats()
+      }
+    }
+    es.onerror = () => {
+      if (!silent) setCrawlLog((prev) => [...prev, '❌ 排名连接中断'])
+      setRanking(false)
+      es.close()
+    }
   }
 
-  const stepAnalyze = async () => {
+  const stepAnalyze = (silent = false) => {
     setAnalyzing(true)
-    setCrawlLog((prev) => [...prev, '🔬 AI 分析中...'])
-    try {
-      const res = await fetch('/api/admin/analyze', { method: 'POST' })
-      const data = await res.json()
-      setCrawlLog((prev) => [...prev, `✅ 分析完成: ${data.analyzed || data.message} 条`])
-      await fetchStats()
-    } catch { setCrawlLog((prev) => [...prev, '❌ 分析失败']) }
-    setAnalyzing(false)
+    setAnalyzeProgress({ current: 0, total: 0, message: '' })
+    if (!silent) setCrawlLog((prev) => [...prev, '🔬 AI 分析中...'])
+
+    const es = new EventSource('/api/admin/analyze')
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'progress') {
+        setAnalyzeProgress({ current: data.current, total: data.total, message: data.message || '' })
+      } else if (data.type === 'status') {
+        setAnalyzeProgress((p) => ({ ...p, message: data.message }))
+        if (!silent) setCrawlLog((prev) => [...prev, data.message])
+      } else if (data.type === 'error') {
+        if (!silent) setCrawlLog((prev) => [...prev, `❌ ${data.message}`])
+      } else if (data.type === 'complete') {
+        setAnalyzing(false)
+        es.close()
+        fetchStats()
+      }
+    }
+    es.onerror = () => {
+      if (!silent) setCrawlLog((prev) => [...prev, '❌ 分析连接中断'])
+      setAnalyzing(false)
+      es.close()
+    }
   }
 
-  const runPipeline = async () => {
+  const runPipeline = () => {
     setCrawlLog([])
-    await stepCrawl()
-    await stepRank()
-    await stepAnalyze()
-    setCrawlLog((prev) => [...prev, '🎉 全流程完成！'])
+    stepCrawl(true)
+    setTimeout(() => stepRank(true), 100)
+    setTimeout(() => stepAnalyze(true), 200)
+    setCrawlLog((prev) => [...prev, '🎉 全流程已启动（三个步骤并行执行）'])
   }
 
   const deleteCard = async (id: string) => {
@@ -243,9 +281,28 @@ export default function AdminPage() {
   const tabs = [
     { key: 'dashboard', label: '仪表盘' },
     { key: 'cards', label: '新闻管理' },
-    { key: 'logs', label: '抓取日志' },
+    { key: 'logs', label: '运行日志' },
     { key: 'config', label: 'API 配置' },
   ] as const
+
+  function ProgressBar({ progress, color }: { progress: ProgressInfo; color: string }) {
+    if (progress.total === 0) return null
+    const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
+    return (
+      <div className="mb-4">
+        <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+          <span>{progress.message}</span>
+          <span>{pct}% ({progress.current}/{progress.total})</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+          <div
+            className={`${color} h-full rounded-full transition-all duration-300`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-6">
@@ -288,35 +345,26 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h3 className="font-semibold mb-4">完整流程（按顺序执行）</h3>
 
-            {crawling && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                  <span>{crawlProgress.currentName || '准备中...'}</span>
-                  <span>{crawlProgress.current} / {crawlProgress.total}</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-blue-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${crawlProgress.total > 0 ? (crawlProgress.current / crawlProgress.total) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            )}
+            <div className="space-y-1 mb-4">
+              {crawling && <ProgressBar progress={crawlProgress} color="bg-blue-500" />}
+              {ranking && <ProgressBar progress={rankProgress} color="bg-purple-500" />}
+              {analyzing && <ProgressBar progress={analyzeProgress} color="bg-green-500" />}
+            </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button onClick={stepCrawl} disabled={crawling} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm">
+              <button onClick={() => stepCrawl()} disabled={crawling} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm">
                 {crawling ? '抓取中...' : '① 抓取'}
               </button>
               <span className="text-gray-300">→</span>
-              <button onClick={stepRank} disabled={ranking} className="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm">
+              <button onClick={() => stepRank()} disabled={ranking} className="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm">
                 {ranking ? '排名中...' : '② AI 排名'}
               </button>
               <span className="text-gray-300">→</span>
-              <button onClick={stepAnalyze} disabled={analyzing} className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm">
+              <button onClick={() => stepAnalyze()} disabled={analyzing} className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm">
                 {analyzing ? '分析中...' : '③ AI 分析'}
               </button>
               <span className="text-gray-300 ml-2">|</span>
-              <button onClick={runPipeline} className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-bold">
+              <button onClick={runPipeline} disabled={crawling || ranking || analyzing} className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-bold">
                 一键全流程
               </button>
               <span className="text-gray-300 ml-2">|</span>
@@ -433,10 +481,10 @@ export default function AdminPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">运行日志</h3>
             <div className="flex gap-2">
-              <button onClick={stepCrawl} disabled={crawling} className="px-3 py-1 bg-blue-600 text-white rounded text-xs">抓取</button>
-              <button onClick={stepRank} disabled={ranking} className="px-3 py-1 bg-purple-600 text-white rounded text-xs">排名</button>
-              <button onClick={stepAnalyze} disabled={analyzing} className="px-3 py-1 bg-green-600 text-white rounded text-xs">分析</button>
-              <button onClick={runPipeline} className="px-3 py-1 bg-red-600 text-white rounded text-xs font-bold">全流程</button>
+              <button onClick={() => stepCrawl()} disabled={crawling} className="px-3 py-1 bg-blue-600 text-white rounded text-xs">抓取</button>
+              <button onClick={() => stepRank()} disabled={ranking} className="px-3 py-1 bg-purple-600 text-white rounded text-xs">排名</button>
+              <button onClick={() => stepAnalyze()} disabled={analyzing} className="px-3 py-1 bg-green-600 text-white rounded text-xs">分析</button>
+              <button onClick={runPipeline} disabled={crawling || ranking || analyzing} className="px-3 py-1 bg-red-600 text-white rounded text-xs font-bold">全流程</button>
             </div>
           </div>
           <div className="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm h-96 overflow-y-auto">
